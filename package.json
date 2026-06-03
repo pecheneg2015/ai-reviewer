@@ -13,7 +13,8 @@
     "ask": "tsx src/cli.ts",
     "test-agent": "tsx src/test-agent.ts",
     "mcp-server": "tsx src/mcp-server/server.ts",
-    "mcp-test": "tsx src/mcp-client.ts"
+    "mcp-test": "tsx src/mcp-client.ts",
+    "history": "tsx src/cli.ts history"
   },
   "dependencies": {
     "@langchain/community": "^0.3.0",

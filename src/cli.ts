@@ -3,6 +3,7 @@ dotenv.config();
 
 import { graph } from './graph.js';
 import { closeMCPClient } from './mcp-tools.js';
+import { loadHistory, formatHistory, saveRecord, formatLastRecord } from './utils/memory.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -59,7 +60,11 @@ async function main() {
 
     return;
   }
-
+  if (command === 'history') {
+    const history = loadHistory();
+    console.log(formatHistory(history));
+    return;
+  }
   // -----------------------------------------------------------------------
   // ask
   // -----------------------------------------------------------------------

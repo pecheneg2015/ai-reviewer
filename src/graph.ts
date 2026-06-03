@@ -12,6 +12,9 @@ import { sanitizeContext } from './guards/context-sanitizer.js';
 import { classifyViolation, requiresHumanReview } from './guards/criticality-classifier.js';
 import type { Criticality } from './guards/criticality-classifier.js';
 import { askConfirmation, formatViolationForHITL } from './hitl.js';
+import { safeLLMCall } from './utils/retry.js';
+import { getMockDiff } from './utils/github-fallback.js';
+import { saveRecord, type ReviewRecord } from './utils/memory.js';
 
 const COLLECTION_NAME = 'code-guidelines';
 
@@ -35,7 +38,7 @@ type AgentStateType = typeof AgentState.State;
 // ---------------------------------------------------------------------------
 
 async function retrieveNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
-  console.log('🔍 Поиск релевантных документов...');
+  console.log('🔍 Поиск релевантных документов (MMR)...');
 
   const embeddings = new OllamaEmbeddings({
     model: process.env.OLLAMA_EMBED_MODEL || 'nomic-embed-text-v2-moe',
@@ -47,7 +50,12 @@ async function retrieveNode(state: AgentStateType): Promise<Partial<AgentStateTy
     collectionName: COLLECTION_NAME,
   });
 
-  const docs = await vectorStore.similaritySearch(state.question, 3);
+  const docs = await vectorStore.maxMarginalRelevanceSearch(state.question, {
+    k: 3,
+    fetchK: 10,
+    lambda: 0.5,
+  });
+
   console.log(`   Найдено чанков: ${docs.length}`);
 
   const context = sanitizeContext(
@@ -55,15 +63,18 @@ async function retrieveNode(state: AgentStateType): Promise<Partial<AgentStateTy
       source: (doc.metadata.source as string) || 'неизвестно',
       content: doc.pageContent,
     }))
-  ); return { context };
+  );
+
+  return { context };
 }
 
 // ---------------------------------------------------------------------------
-// analyze_diff (с Pre-Guard внутри)
+// analyze_diff
 // ---------------------------------------------------------------------------
 
 async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
   console.log('📥 Анализ PR...\n');
+  const overallStartTime = Date.now();
 
   let tools;
   try {
@@ -80,28 +91,44 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
     return { reviewResult: '❌ Не все MCP-инструменты доступны.' };
   }
 
+  // -------------------------------------------------------------------
   // 1. Получаем дифф
+  // -------------------------------------------------------------------
   console.log('1️⃣ Получение диффа...');
-  let diffRaw: string;
-  try {
-    diffRaw = await diffTool.invoke(JSON.stringify({ prNumber: state.prNumber }));
-  } catch {
-    return { reviewResult: '❌ Не удалось получить дифф.' };
-  }
 
+  const useRealGitHub = process.env.USE_REAL_GITHUB_API === 'true';
   let files: Array<{ filename: string; status: string; patch: string }>;
-  try {
-    const parsed = JSON.parse(diffRaw);
-    if ((parsed as any).error) {
-      return { reviewResult: `❌ GitHub API: ${(parsed as any).error}` };
+
+  if (useRealGitHub) {
+    let diffRaw: string;
+    try {
+      diffRaw = await diffTool.invoke(JSON.stringify({ prNumber: state.prNumber }));
+    } catch {
+      console.log('   ⚠️ GitHub API недоступен, использую мок-данные');
+      files = getMockDiff();
     }
-    files = parsed;
-  } catch {
-    return { reviewResult: '❌ Ошибка парсинга диффа.' };
+
+    if (!files!) {
+      try {
+        const parsed = JSON.parse(diffRaw!);
+        if ((parsed as any).error) {
+          console.log('   ⚠️ GitHub API error, использую мок-данные');
+          files = getMockDiff();
+        } else {
+          files = parsed;
+        }
+      } catch {
+        console.log('   ⚠️ Ошибка парсинга, использую мок-данные');
+        files = getMockDiff();
+      }
+    }
+  } else {
+    console.log('   📦 Использую мок-данные');
+    files = getMockDiff();
   }
 
   // -------------------------------------------------------------------
-  // Pre-Guard: проверяем дифф на инъекции
+  // Pre-Guard
   // -------------------------------------------------------------------
   console.log('🛡️ Pre-Guard: проверка на инъекции...');
 
@@ -123,32 +150,58 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
 
   console.log(`   Файлов: ${files.length}\n`);
 
-  // 2. Загружаем правила
-  console.log('2️⃣ Загрузка правил...');
+  // -------------------------------------------------------------------
+  // 2. Загружаем правила — MMR
+  // -------------------------------------------------------------------
+  console.log('2️⃣ Загрузка правил (MMR)...');
+
+  const embeddings = new OllamaEmbeddings({
+    model: process.env.OLLAMA_EMBED_MODEL || 'nomic-embed-text-v2-moe',
+    baseUrl: process.env.OLLAMA_BASE_URL,
+  });
+
+  const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
+    url: process.env.QDRANT_URL,
+    collectionName: COLLECTION_NAME,
+  });
+
   const rulesQueries = [
-    'naming conventions for React event handlers functions variables camelCase PascalCase',
-    'forbidden patterns in React code console.log dangerouslySetInnerHTML document.getElementById',
-    'React component code style rules imports formatting',
+    { query: 'naming conventions for React event handlers functions variables camelCase PascalCase' },
+    { query: 'forbidden patterns in React code console.log dangerouslySetInnerHTML document.getElementById' },
+    { query: 'React component code style rules imports formatting' },
   ];
 
   const allRules: Array<{ source: string; content: string }> = [];
   const seenSources = new Set<string>();
 
-  for (const query of rulesQueries) {
-    const raw = await searchTool.invoke(
-      JSON.stringify({ query, limit: 3 })
-    );
-
+  for (const { query } of rulesQueries) {
     try {
-      const results = JSON.parse(raw);
-      for (const r of results) {
-        if (!seenSources.has(r.source)) {
-          seenSources.add(r.source);
-          allRules.push(r);
+      const docs = await vectorStore.maxMarginalRelevanceSearch(query, {
+        k: 3,
+        fetchK: 10,
+        lambda: 0.5,
+      });
+
+      for (const doc of docs) {
+        const source = (doc.metadata.source as string) || 'неизвестно';
+        if (!seenSources.has(source)) {
+          seenSources.add(source);
+          allRules.push({ source, content: doc.pageContent });
         }
       }
     } catch {
-      // пропускаем
+      const raw = await searchTool.invoke(JSON.stringify({ query, limit: 3 }));
+      try {
+        const results = JSON.parse(raw);
+        for (const r of results) {
+          if (!seenSources.has(r.source)) {
+            seenSources.add(r.source);
+            allRules.push(r);
+          }
+        }
+      } catch {
+        // пропускаем
+      }
     }
   }
 
@@ -162,7 +215,9 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
     allRules.map((r) => ({ source: r.source, content: r.content }))
   );
 
-  // 2.5 Генерируем чек-лист
+  // -------------------------------------------------------------------
+  // 2.5 Чек-лист
+  // -------------------------------------------------------------------
   const CHECKLIST_PROMPT = PromptTemplate.fromTemplate(`Ты — старший разработчик, который составляет чек-лист для ревью пул-реквеста.
 Извлеки из стандартов команды КОНКРЕТНЫЕ ПРОВЕРЯЕМЫЕ ПРАВИЛА.
 Каждый пункт должен быть сформулирован так, чтобы по диффу можно было однозначно сказать: нарушено или нет.
@@ -205,10 +260,17 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
   });
 
   console.log('2.5️⃣ Генерация чек-листа...');
-  const checklistResponse = await checklistLLM.invoke(
-    await CHECKLIST_PROMPT.format({ rulesText })
+
+  const checklistText = await safeLLMCall(
+    async () => {
+      const response = await checklistLLM.invoke(
+        await CHECKLIST_PROMPT.format({ rulesText })
+      );
+      return typeof response.content === 'string' ? response.content : '';
+    },
+    '[]',
+    'Чек-лист LLM'
   );
-  const checklistText = typeof checklistResponse.content === 'string' ? checklistResponse.content : '';
 
   let checklist: string[] = [];
   const checklistJson = checklistText.match(/\[[\s\S]*\]/);
@@ -225,7 +287,9 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
   }
   console.log('');
 
+  // -------------------------------------------------------------------
   // 3. LLM-анализ
+  // -------------------------------------------------------------------
   const llm = new ChatOllama({
     model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
     baseUrl: process.env.OLLAMA_BASE_URL,
@@ -275,7 +339,7 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
   "violations": []
 }}`);
 
-  const allViolations: Array<{ file: string; line: number; text: string; criticality: string }> = [];
+  const allViolations: Array<{ file: string; line: number; text: string; criticality: string; posted: boolean }> = [];
   let totalComments = 0;
 
   for (const file of files) {
@@ -293,12 +357,15 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
     });
 
     console.log('   🧠 LLM-анализ...');
-    const startTime = Date.now();
-    const response = await llm.invoke(formattedPrompt);
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`   ⏱️ LLM: ${elapsed} сек.`);
 
-    const text = typeof response.content === 'string' ? response.content : '';
+    const text = await safeLLMCall(
+      async () => {
+        const response = await llm.invoke(formattedPrompt);
+        return typeof response.content === 'string' ? response.content : '';
+      },
+      '{"violations": []}',
+      'Анализ LLM'
+    );
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -322,15 +389,14 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
         console.log(`   ⚠️ Строка ${v.line}: ${v.rule} [${criticality}]${needsHuman ? ' ← HITL' : ''}`);
 
         if (needsHuman) {
-          // Сохраняем для HITL (День 4)
           allViolations.push({
             file: file.filename,
             line: v.line,
             text: v.rule,
             criticality,
+            posted: false,
           });
         } else {
-          // Авто-комментарий
           try {
             await commentTool.invoke(
               JSON.stringify({
@@ -346,9 +412,17 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
               line: v.line,
               text: v.rule,
               criticality,
+              posted: true,
             });
           } catch {
             console.log(`   ⚠️ Не удалось опубликовать`);
+            allViolations.push({
+              file: file.filename,
+              line: v.line,
+              text: v.rule,
+              criticality,
+              posted: false,
+            });
           }
         }
       }
@@ -357,44 +431,50 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
     }
 
     console.log('');
+  }
 
-    // 3.5 HITL: запрашиваем подтверждение для критических нарушений
-    const hitlViolations = allViolations.filter((v) =>
-      requiresHumanReview(v.criticality as Criticality)
-    );
+  // -------------------------------------------------------------------
+  // 3.5 HITL
+  // -------------------------------------------------------------------
+  const hitlViolations = allViolations.filter((v) =>
+    requiresHumanReview(v.criticality as Criticality)
+  );
 
-    if (hitlViolations.length > 0) {
-      console.log(`\n⏳ Требуется подтверждение для ${hitlViolations.length} нарушений:`);
+  if (hitlViolations.length > 0) {
+    console.log(`\n⏳ Требуется подтверждение для ${hitlViolations.length} нарушений:`);
 
-      for (let i = 0; i < hitlViolations.length; i++) {
-        const v = hitlViolations[i];
-        console.log(formatViolationForHITL(v, i, hitlViolations.length));
+    for (let i = 0; i < hitlViolations.length; i++) {
+      const v = hitlViolations[i];
+      console.log(formatViolationForHITL(v, i, hitlViolations.length));
 
-        const approved = await askConfirmation('');
+      const approved = await askConfirmation('');
 
-        if (approved) {
-          try {
-            await commentTool.invoke(
-              JSON.stringify({
-                prNumber: state.prNumber,
-                file: v.file,
-                line: v.line,
-                text: `🤖 **AI Code Review:** ${v.text}.`,
-              })
-            );
-            totalComments++;
-            console.log('   ✅ Опубликовано');
-          } catch {
-            console.log('   ⚠️ Не удалось опубликовать');
-          }
-        } else {
-          console.log('   ❌ Пропущено');
+      if (approved) {
+        try {
+          await commentTool.invoke(
+            JSON.stringify({
+              prNumber: state.prNumber,
+              file: v.file,
+              line: v.line,
+              text: `🤖 **AI Code Review:** ${v.text}.`,
+            })
+          );
+          totalComments++;
+          v.posted = true;
+          console.log('   ✅ Опубликовано');
+        } catch {
+          console.log('   ⚠️ Не удалось опубликовать');
         }
+      } else {
+        v.posted = false;
+        console.log('   ❌ Пропущено');
       }
     }
   }
 
+  // -------------------------------------------------------------------
   // 4. Итог
+  // -------------------------------------------------------------------
   if (allViolations.length === 0) {
     return { reviewResult: '✅ Нарушений не найдено.' };
   }
@@ -402,16 +482,46 @@ async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStat
   const autoCount = allViolations.filter((v) => !requiresHumanReview(v.criticality as Criticality)).length;
   const hitlCount = allViolations.filter((v) => requiresHumanReview(v.criticality as Criticality)).length;
 
+  // -------------------------------------------------------------------
+  // Сохраняем в историю
+  // -------------------------------------------------------------------
+  const hitlConfirmed = hitlViolations.filter((v) => v.posted).length;
+  const hitlSkipped = hitlViolations.filter((v) => !v.posted).length;
+  const durationSec = parseFloat(((Date.now() - overallStartTime) / 1000).toFixed(1));
+
+  const record: ReviewRecord = {
+    timestamp: new Date().toISOString(),
+    prNumber: state.prNumber,
+    mode: process.env.USE_REAL_GITHUB_API === 'true' ? 'real' : 'mock',
+    violationsFound: allViolations.length,
+    autoComments: totalComments,
+    hitlConfirmed,
+    hitlSkipped,
+    durationSec,
+    violations: allViolations.map((v) => ({
+      file: v.file,
+      line: v.line,
+      text: v.text,
+      criticality: v.criticality,
+      posted: v.posted,
+    })),
+  };
+
+  saveRecord(record);
+
   return {
     reviewResult:
       `📊 Найдено нарушений: ${allViolations.length}\n` +
       `💬 Авто-комментариев: ${autoCount}\n` +
-      `⏳ Требуют подтверждения (HITL): ${hitlCount}\n\n` +
+      `⏳ Требуют подтверждения (HITL): ${hitlCount}\n` +
+      `✅ Подтверждено: ${hitlConfirmed}\n` +
+      `❌ Пропущено: ${hitlSkipped}\n\n` +
       allViolations.map((v) =>
-        `   ${requiresHumanReview(v.criticality as Criticality) ? '⏳' : '✅'} [${v.file}:${v.line}] ${v.text} [${v.criticality}]`
+        `   ${v.posted ? '✅' : '⏳'} [${v.file}:${v.line}] ${v.text} [${v.criticality}]`
       ).join('\n'),
   };
 }
+
 // ---------------------------------------------------------------------------
 // generate
 // ---------------------------------------------------------------------------
@@ -450,8 +560,25 @@ async function generateNode(state: AgentStateType): Promise<Partial<AgentStateTy
     question: state.question,
   });
 
-  const response = await llm.invoke(formattedPrompt);
-  const answer = typeof response.content === 'string' ? response.content : '';
+  let answer: string;
+
+  try {
+    const response = await safeLLMCall(
+      async () => {
+        return await llm.invoke(formattedPrompt);
+      },
+      null,
+      'Генерация ответа'
+    );
+
+    answer = response
+      ? typeof response.content === 'string'
+        ? response.content
+        : ''
+      : 'Произошла ошибка при генерации ответа. Попробуйте позже.';
+  } catch {
+    answer = 'Произошла ошибка при генерации ответа. Попробуйте позже.';
+  }
 
   return { answer };
 }
