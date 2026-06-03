@@ -1,14 +1,48 @@
 # 🤖 AI Code Reviewer
 
-Автоматический ревьюер пул-реквестов с RAG, MCP и Human-in-the-Loop.
+Автоматический ревьюер пул-реквестов с RAG, MCP, мультиагентностью и Human-in-the-Loop.
 
 ## Архитектура
 
 ```
-[CLI] → [LangGraph Agent]
-           ├── retrieve (Qdrant)
-           └── generate (Ollama / OpenAI)
+[CLI] → [LangGraph]
+           ├── Supervisor Agent (выбор маршрута)
+           ├── Retriever Agent (MMR-поиск в Qdrant)
+           ├── Reviewer Agent (анализ диффа через MCP)
+           └── Generator Agent (ответ через Ollama)
 ```
+
+## Возможности
+
+### RAG-пайплайн
+- 7 документов с правилами код-ревью (naming, React, тесты, a11y, безопасность, git)
+- MMR-поиск для разнообразия результатов
+- ContextSanitizer — защита от косвенных инъекций через XML-обёртку
+
+### MCP-интеграция
+- Кастомный MCP-сервер с 4 инструментами:
+  - `search_guidelines` — поиск правил в Qdrant
+  - `get_pull_request_diff` — получение диффа из GitHub
+  - `get_file_content` — чтение файла из PR
+  - `post_review_comment` — публикация комментария
+
+### Защита от prompt injection
+- **Pre-Guard** — фильтрация прямых инъекций в диффе
+- **ContextSanitizer** — фильтрация косвенных инъекций в RAG
+- **CriticalityClassifier** — 4 уровня критичности нарушений
+
+### Human-in-the-Loop
+- Критические нарушения (critical/high) требуют подтверждения `[y/n]`
+- Обычные нарушения (medium/low) постятся автоматически
+
+### Отказоустойчивость
+- Retry с экспоненциальной задержкой для LLM-вызовов
+- Fallback на мок-данные при недоступности GitHub API
+- Безопасные вызовы LLM с дефолтными ответами
+
+### Память агента
+- Сохранение истории проверок в JSON
+- Просмотр через `npm run history`
 
 ## Быстрый старт
 
@@ -40,10 +74,16 @@ npm run ingest
 npm run ask "Как называть обработчики событий?"
 ```
 
-### 5. Запустить все тесты
+### 5. Проверить пул-реквест
 
 ```bash
-npm run test-agent
+npm run review 1
+```
+
+### 6. История проверок
+
+```bash
+npm run history
 ```
 
 ## Команды
@@ -54,29 +94,40 @@ npm run test-agent
 | `npm run ingest` | Индексация документов в Qdrant |
 | `npm run ask "вопрос"` | Задать вопрос агенту |
 | `npm run test-agent` | Прогнать 5 тестовых вопросов |
-| `npm run review <PR>` | Проверка PR (Спринт 2) |
+| `npm run review <PR>` | Проверить пул-реквест |
+| `npm run history` | Просмотр истории проверок |
+| `npm run mcp-test` | Тест MCP-клиента |
 
 ## Документы в RAG
 
-- `code-style.md` — правила оформления кода
-- `naming-conventions.md` — правила именования
-- `react-patterns.md` — паттерны и антипаттерны React
-- `testing-requirements.md` — требования к тестам
-- `accessibility.md` — требования по доступности
-- `security-guidelines.md` — правила безопасности
-- `git-workflow.md` — правила Git и PR
+| Файл | Содержание |
+|------|-----------|
+| `code-style.md` | Правила оформления кода |
+| `naming-conventions.md` | Правила именования |
+| `react-patterns.md` | Паттерны и антипаттерны React |
+| `testing-requirements.md` | Требования к тестам |
+| `accessibility.md` | Требования по доступности |
+| `security-guidelines.md` | Правила безопасности |
+| `git-workflow.md` | Правила Git и PR |
 
 ## Технологии
 
-- **LangChain** + **LangGraph** — оркестрация агента
-- **Qdrant** — векторная база данных
-- **Ollama** — локальные модели (эмбеддинги + LLM)
-- **MCP** — Model Context Protocol (Спринт 2)
-- **TypeScript** — язык разработки
+| Технология | Назначение |
+|-----------|-----------|
+| **LangChain + LangGraph** | Оркестрация агентов |
+| **Qdrant** | Векторная база данных |
+| **Ollama** | Локальные модели (qwen2.5-coder:7b, nomic-embed-text-v2-moe) |
+| **MCP** | Model Context Protocol |
+| **GitHub API** | Интеграция с пул-реквестами |
+| **TypeScript** | Язык разработки |
 
-## Статус
+## Статус проекта
 
-- [x] Спринт 1: RAG-агент
-- [ ] Спринт 2: MCP-сервер + GitHub
-- [ ] Спринт 3: Защита + HITL
-- [ ] Спринт 4: Финал
+| Спринт | Содержание | Статус |
+|:---:|---|:---:|
+| 1 | Docker, Qdrant, RAG-агент | ✅ |
+| 2 | MCP-сервер, GitHub-интеграция | ✅ |
+| 3 | Pre-Guard, ContextSanitizer, HITL | ✅ |
+| 4 | MMR-поиск, retry, fallback, память | ✅ |
+| 5 | Мультиагентность | ⏳ |
+| 6 | Финал: CLI, сценарий, документация | ⬜ |
