@@ -40,15 +40,9 @@ async function main() {
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-      console.log('━'.repeat(50));
+      console.log('\n' + '━'.repeat(50));
       console.log(`⏱️  Время: ${elapsed} сек.`);
-
-      if (result.reviewResult.includes('Нарушений не найдено')) {
-        console.log('✅ Нарушений не найдено.');
-      } else {
-        console.log(result.reviewResult);
-      }
-
+      console.log(result.reviewResult);
       console.log('━'.repeat(50));
       console.log('✅ Проверка завершена.');
     } catch (e) {
