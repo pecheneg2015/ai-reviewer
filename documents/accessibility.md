@@ -1,35 +1,18 @@
-# Accessibility Requirements (A11y)
+# Accessibility (A11y)
 
-## Общие требования
-- Все компоненты должны соответствовать **WCAG 2.1 AA**.
-- Проверка доступности обязательна перед мержем.
+## Images
+- `<img>` must have alt attribute.
+- Decorative images: alt="".
+- Informative images: meaningful description.
 
-## Изображения
-- Все `<img>` должны иметь атрибут `alt`.
-- Декоративные изображения должны иметь `alt=""`.
-- Информативные изображения должны иметь осмысленное описание в `alt`.
+## Forms
+- input, select, textarea must have associated label.
+- Use htmlFor to link label to input.
 
-## Формы
-- Все `<input>`, `<select>`, `<textarea>` должны иметь связанный `<label>`.
-- Используйте `htmlFor` для связывания label с input.
-- Сообщения об ошибках должны быть связаны с полем через `aria-describedby`.
+## Buttons
+- `<button>` for actions, `<a>` for navigation.
+- Must have text content or aria-label.
 
-## Кнопки и ссылки
-- Используйте `<button>` для действий, `<a>` для навигации.
-- Кнопки должны иметь текстовое содержимое или `aria-label`.
-- Иконки без текста должны иметь `aria-label`.
-
-## Заголовки
-- Используйте заголовки `<h1>`–`<h6>` иерархически.
-- Не пропускайте уровни заголовков (не переходите от h1 к h3).
-- На странице должен быть ровно один `<h1>`.
-
-## Клавиатурная навигация
-- Все интерактивные элементы должны быть доступны с клавиатуры.
-- Фокус должен быть видимым (не удаляйте `outline` без замены).
-- Порядок фокуса должен быть логическим (tabindex только 0 или -1).
-
-## ARIA
-- Не используйте ARIA, если есть нативный HTML-элемент с нужной семантикой.
-- `aria-label` — только если нет видимого текста.
-- `aria-hidden="true"` — для декоративных элементов.
+## Keyboard
+- Interactive elements must be keyboard accessible.
+- Focus must be visible.

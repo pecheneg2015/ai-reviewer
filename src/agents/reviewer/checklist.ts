@@ -1,6 +1,6 @@
-import { ChatOllama } from '@langchain/community/chat_models/ollama';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { safeLLMCall } from '../../utils/retry.js';
+import { createLLM } from '../../llm-factory.js';
 
 const CHECKLIST_PROMPT = PromptTemplate.fromTemplate(`Ты — старший разработчик, который составляет чек-лист для ревью пул-реквеста.
 Извлеки из стандартов команды КОНКРЕТНЫЕ ПРОВЕРЯЕМЫЕ ПРАВИЛА.
@@ -39,11 +39,8 @@ const CHECKLIST_PROMPT = PromptTemplate.fromTemplate(`Ты — старший р
 export async function generateChecklist(rulesText: string): Promise<string[]> {
   console.log('2.5️⃣ Генерация чек-листа...');
 
-  const llm = new ChatOllama({
-    model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
-    baseUrl: process.env.OLLAMA_BASE_URL,
-    temperature: 0,
-  });
+  const llm = await createLLM();
+
 
   const text = await safeLLMCall(
     async () => {

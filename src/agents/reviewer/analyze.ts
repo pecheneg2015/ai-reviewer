@@ -1,4 +1,4 @@
-import { ChatOllama } from '@langchain/community/chat_models/ollama';
+import { createLLM } from '../../llm-factory.js';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { safeLLMCall } from '../../utils/retry.js';
 import { classifyViolation } from '../../guards/criticality-classifier.js';
@@ -54,11 +54,8 @@ export async function analyzeFile(
     return [];
   }
 
-  const llm = new ChatOllama({
-    model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
-    baseUrl: process.env.OLLAMA_BASE_URL,
-    temperature: 0,
-  });
+  const llm = await createLLM();
+
 
   const formattedPrompt = await REVIEW_PROMPT.format({
     checklist: checklist.map((c, i) => `${i + 1}. ${c}`).join('\n'),

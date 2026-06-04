@@ -1,29 +1,24 @@
 # Code Style Guide
 
-## Отступы и форматирование
-- Используйте 2 пробела для отступов.
-- Максимальная длина строки — 100 символов.
-- В конце файлов должна быть одна пустая строка.
+## console.log
+- console.log is forbidden in production code.
+- Use a proper logger instead.
 
-## Точка с запятой
-- Точка с запятой в конце выражений **обязательна**.
-- Исключение: функции, объявленные через `function` (не стрелочные).
+## Indentation
+- Use 2 spaces for indentation.
+- Max line length: 100 characters.
 
-## Кавычки
-- Для строк используйте **одинарные кавычки**.
-- Для JSX-атрибутов — **двойные кавычки**.
+## Semicolons
+- Semicolons are mandatory at the end of expressions.
 
-## Импорты
-- Импорты должны быть отсортированы по алфавиту.
-- Сначала сторонние библиотеки, затем внутренние модули.
-- Запрещены неиспользуемые импорты.
+## Quotes
+- Single quotes for strings.
+- Double quotes for JSX attributes.
 
-## Комментарии
-- Комментарии должны быть на русском или английском языке.
-- Закомментированный код должен быть удалён перед мержем.
-- Комментарии вида "TODO" и "FIXME" разрешены только с указанием автора и даты.
+## Imports
+- Sort imports alphabetically.
+- Third-party first, then internal modules.
+- Unused imports are forbidden.
 
-## Обработка ошибок
-- Все асинхронные операции должны быть обёрнуты в try/catch.
-- Ошибки должны логироваться с уровнем и контекстом.
-- Не допускается проглатывание ошибок (пустой catch-блок).
+## Comments
+- Remove commented-out code before merge.

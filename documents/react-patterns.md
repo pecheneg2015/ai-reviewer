@@ -1,37 +1,21 @@
-# React Patterns and Anti-Patterns
+# React Patterns
 
-## Работа с состоянием
-- Используйте `useState` для локального состояния.
-- Не мутируйте состояние напрямую. Всегда создавайте новый объект/массив.
-- Для сложного состояния используйте `useReducer`.
+## Props
+- Destructure props in component signature.
+- Type props with TypeScript.
+- Do not pass unused props.
 
-## Эффекты
-- `useEffect` должен иметь массив зависимостей.
-- Пустой массив `[]` — эффект выполняется только при монтировании.
-- Без массива зависимостей — эффект выполняется при каждом рендере (запрещено).
-- Асинхронные функции внутри `useEffect` должны быть объявлены и вызваны внутри.
+## State
+- Use useState for local state.
+- Never mutate state directly.
+- Use useReducer for complex state.
 
-## Мемоизация
-- `useMemo` — для тяжёлых вычислений.
-- `useCallback` — для функций, передаваемых в дочерние компоненты.
-- Не оборачивайте в `useMemo`/`useCallback` всё подряд — это усложняет код.
+## Forbidden Patterns
+- dangerouslySetInnerHTML without sanitization.
+- document.getElementById — use refs instead.
+- console.log in production code.
+- Computed values stored in state.
 
-## Условный рендеринг
-- Используйте тернарный оператор или `&&` для простых условий.
-- Для сложной логики — выносите в отдельную функцию или переменную.
-- Не используйте `if/else` внутри JSX.
-
-## Ключи в списках
-- Всегда указывайте `key` при рендеринге списков.
-- Не используйте `index` в качестве `key`, если список может изменяться.
-- `key` должен быть уникальным и стабильным идентификатором.
-
-## Пропсы
-- Деструктурируйте пропсы в сигнатуре компонента.
-- Используйте TypeScript для типизации пропсов.
-- Не передавайте пропсы, которые не используются компонентом.
-
-## Антипаттерны
-- Запрещено использование `dangerouslySetInnerHTML` без санитизации.
-- Запрещено прямое обращение к DOM через `document.getElementById` (используйте refs).
-- Запрещено хранение вычисляемых значений в состоянии.
+## Effects
+- useEffect must have dependency array.
+- Empty array [] means mount only.

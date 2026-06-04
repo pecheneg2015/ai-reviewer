@@ -1,6 +1,6 @@
-import { ChatOllama } from '@langchain/community/chat_models/ollama';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { safeLLMCall } from '../utils/retry.js';
+import { createLLM } from '../llm-factory.js';
 
 const SYSTEM_TEMPLATE = `Ты — AI-ревьюер. Твоя задача — отвечать на вопросы пользователя строго на основе предоставленных документов.
 
@@ -25,11 +25,13 @@ const prompt = PromptTemplate.fromTemplate(SYSTEM_TEMPLATE);
 export async function generateAnswer(question: string, context: string): Promise<string> {
   console.log('🧠 Генерация ответа...');
 
-  const llm = new ChatOllama({
-    model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
-    baseUrl: process.env.OLLAMA_BASE_URL,
-    temperature: 0,
-  });
+  const llm = await createLLM();
+
+  // const llm = new ChatOllama({
+  //   model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
+  //   baseUrl: process.env.OLLAMA_BASE_URL,
+  //   temperature: 0,
+  // });
 
   const formattedPrompt = await prompt.format({ context, question });
 

@@ -1,6 +1,6 @@
-import { ChatOllama } from '@langchain/community/chat_models/ollama';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { safeLLMCall } from '../utils/retry.js';
+import { createLLM } from '../llm-factory.js';
 
 export type AgentRoute = 'retrieve' | 'analyze_diff' | 'security' | 'done';
 
@@ -42,11 +42,13 @@ export async function supervisorDecision(state: SupervisorState): Promise<AgentR
   }
 
   // Ревьюер отработал — анализируем результат через LLM
-  const llm = new ChatOllama({
-    model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
-    baseUrl: process.env.OLLAMA_BASE_URL,
-    temperature: 0,
-  });
+  const llm = await createLLM();
+
+  // const llm = new ChatOllama({
+  //   model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
+  //   baseUrl: process.env.OLLAMA_BASE_URL,
+  //   temperature: 0,
+  // });
 
   const SUPERVISOR_PROMPT = PromptTemplate.fromTemplate(`Ты — супервизор AI-системы код-ревью.
 Проанализируй результат ревью и реши, что делать дальше.

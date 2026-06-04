@@ -1,34 +1,22 @@
 # Naming Conventions
 
-## Переменные и функции
-- Используйте **camelCase** для переменных и функций.
-- Имена должны быть осмысленными, не короче 3 символов.
-- Запрещены однобуквенные имена, кроме `i`, `j`, `k` в циклах.
+## Event Handlers
+- Must start with `handle`: handleClick, handleSubmit.
+- Forbidden abbreviations: btnClck, hndlSbmt, onClk.
 
-## Компоненты React
-- Компоненты именуются в **PascalCase**.
-- Имя файла компонента должно совпадать с именем компонента.
-- Каждый компонент — в отдельной папке с индекс-файлом.
+## Variables and Functions
+- camelCase.
+- Meaningful names, minimum 3 characters.
+- Single-letter names forbidden except i, j, k in loops.
 
-## Обработчики событий
-- Обработчики событий должны начинаться с `handle`.
-- Примеры: `handleClick`, `handleSubmit`, `handleInputChange`.
-- Запрещены сокращения: `btnClck`, `hndlSbmt`, `onClk`.
+## React Components
+- PascalCase: Button, UserProfile.
+- File name must match component name.
+- One component per folder with index file.
 
-## Булевы переменные
-- Булевы переменные должны начинаться с `is`, `has`, `should`, `can`.
-- Примеры: `isLoading`, `hasError`, `shouldRender`, `canSubmit`.
+## Boolean Variables
+- Start with is, has, should: isLoading, hasError.
 
-## Константы
-- Глобальные константы — **UPPER_SNAKE_CASE**.
-- Локальные константы — **camelCase**.
-
-## Типы и интерфейсы TypeScript
-- Интерфейсы: **PascalCase**, без префикса `I`.
-- Типы: **PascalCase**, без префикса `T`.
-- Примеры: `User`, `ButtonProps`, `ApiResponse`.
-
-## CSS-классы
-- Используйте **kebab-case** или CSS-модули.
-- Имя класса должно отражать назначение, а не внешний вид.
-- Запрещены классы вроде `red-text`, `big-font`.
+## Constants
+- Global: UPPER_SNAKE_CASE.
+- Local: camelCase.

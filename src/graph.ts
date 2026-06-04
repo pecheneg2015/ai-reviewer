@@ -7,7 +7,7 @@ import { retrieveContext } from './agents/retriever.js';
 import { generateAnswer } from './agents/generator.js';
 import { securityCheck } from './agents/security.js';
 import { reviewPR } from './agents/reviewer/index.js';
-import { getMockDiff } from './utils/github-fallback.js';
+import { fetchDiff } from './agents/reviewer/fetch-diff.js';
 
 // ---------------------------------------------------------------------------
 // Состояние
@@ -50,7 +50,7 @@ async function supervisorNode(state: AgentStateType): Promise<Partial<AgentState
 // ---------------------------------------------------------------------------
 
 async function securityNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
-  const files = getMockDiff();
+  const files = await fetchDiff(state.prNumber);  // ← реальный дифф
   const result = await securityCheck(files);
 
   if (!result.passed) {

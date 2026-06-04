@@ -10,8 +10,9 @@ const RULES_QUERIES = [
   'naming conventions for React event handlers functions variables camelCase PascalCase',
   'forbidden patterns in React code console.log dangerouslySetInnerHTML document.getElementById',
   'React component code style rules imports formatting',
+  'img alt attribute accessibility JSX',
+  'props destructuring TypeScript',
 ];
-
 export async function fetchRules(): Promise<string> {
   console.log('2️⃣ Загрузка правил (MMR)...');
 

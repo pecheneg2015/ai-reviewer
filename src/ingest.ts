@@ -12,8 +12,8 @@ import { Document } from '@langchain/core/documents';
 
 const DOCUMENTS_DIR = join(process.cwd(), 'documents');
 const COLLECTION_NAME = 'code-guidelines';
-const CHUNK_SIZE = 500;        // Было 1000
-const CHUNK_OVERLAP = 100;     // Было 200
+const CHUNK_SIZE = 1000;        // Было 1000
+const CHUNK_OVERLAP = 200;     // Было 200
 const USE_LOCAL_MODELS = process.env.USE_LOCAL_MODELS === 'true';
 
 function loadDocuments(dir: string): Document[] {
