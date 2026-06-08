@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatOllama } from '@langchain/community/chat_models/ollama';
-
+import { v4 } from 'uuid'
 let cachedToken: string | null = null;
 let tokenExpiresAt: number = 0;
 
@@ -23,6 +23,7 @@ async function getGigaChatToken(): Promise<string> {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: `Basic ${auth}`,
+      RqUID: v4()
     },
     body: 'scope=GIGACHAT_API_PERS',
   });
