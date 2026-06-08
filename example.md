@@ -1,3 +1,4 @@
+```
 🤖 AI Code Reviewer
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 Проверка PR #1
@@ -220,3 +221,5 @@
    ✅ [src/Test.tsx:12] console.log statements are forbidden in production code [high]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Проверка завершена.
+
+```
