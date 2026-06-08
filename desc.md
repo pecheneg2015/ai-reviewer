@@ -42,9 +42,9 @@ size: 16:9
                          └── Generator (LLM)
 ```
 
-- 5 агентов, граф на `Annotation.Root` (11 полей)
+- 5 агентов, граф на `Annotation.Root` (13 полей)
 - `supervisorRoute` — решение супервизора
-- `securityDone`, `reviewDone` — флаги состояния
+- `reviewPass` / `maxReviewPasses` — контроль проходов
 - `reviewResult` — накопление результатов
 
 ---
@@ -57,11 +57,10 @@ supervisor → security → supervisor → reviewer → supervisor
                                               └── ЦИКЛ ──┘
 ```
 
-1. Супервизор вызывает агента
-2. Агент возвращает результат в состояние
-3. Супервизор анализирует через LLM
-4. Готово? → `retriever` → `END`
-5. Нужно ещё? → `reviewer` (цикл)
+**Демо (реальный запуск):**
+- Проход 1/2: naming + запреты → 3 авто-комментария
+- Проход 2/2: accessibility + тесты → 3 HITL
+- Итог: 6 нарушений, 3 авто + 3 подтверждено
 
 ---
 
@@ -80,6 +79,10 @@ documents/*.md → ingest.ts → Qdrant
                     ↓
               post-results/ (auto / HITL)
 ```
+
+- 7 документов, английский язык
+- MMR: k=3, fetchK=10, λ=0.5
+- Чек-лист: 39-49 пунктов
 
 ---
 
@@ -184,6 +187,28 @@ Fallback: ошибка MMR → `searchTool.invoke()` через MCP.
 - Независимые модули со своей логикой
 - Разный порядок вызовов
 - Цикл: supervisor → agent → supervisor
+- `reviewPass` управляет количеством проходов
+
+---
+
+## Эпизодическая память агента
+
+```
+История проверок (JSON)
+        │
+        ▼
+context-memory.ts → LLM-анализ паттернов
+        │
+        ▼
+"В последних PR часто встречаются:
+ - console.log
+ - отсутствие alt у img"
+        │
+        ▼
+Контекст передаётся в analyze.ts
+```
+
+**Агент помнит паттерны и адаптирует анализ.**
 
 ---
 
@@ -206,8 +231,6 @@ Fallback: ошибка MMR → `searchTool.invoke()` через MCP.
 | Провайдер | Ollama ↔ GigaChat (`.env`) |
 | GigaChat токен | Кеш + автообновление |
 
-> В продакшене: retry для GitHub API + кеширование последнего успешного ответа.
-
 ---
 
 ## Смена провайдера
@@ -226,27 +249,31 @@ return new ChatOllama({ model: 'qwen2.5-coder:7b' });
 
 ---
 
-## Результаты
+## Результаты (GigaChat)
 
 | Нарушение | Найдено | Уровень |
 |----------|:---:|:---:|
 | `btnClck` → handle | ✅ | medium |
-| `console.log` | ✅ | high |
+| `btnClck` → forbidden abbreviation | ✅ | medium |
+| `TestComponent` → PascalCase | ✅ | medium |
+| `<button>` без aria-label | ✅ | high |
 | `<img>` без `alt` | ✅ | high |
-| `props` без деструктуризации | ❌ | — |
+| `console.log` | ✅ | high |
 
-Провайдеры: Ollama (qwen2.5-coder:7b) + GigaChat (GigaChat-Pro)
+**6/6 найдено** | Проходов: 2 | HITL: 3/3 подтверждено
 
 ---
 
 ## Покрытие тем курса
 
-| Тема | Файлы |
-|------|------|
-| Провайдер + ошибки | `llm-factory.ts`, `retry.ts` |
-| RAG + MMR | `ingest.ts`, `fetch-rules.ts` |
-| Агент + HITL | `graph.ts`, `memory.ts`, `hitl.ts` |
-| Мультиагентность | `supervisor.ts`, `reviewer/` |
+| Тема | Статус | Файлы |
+|------|:---:|------|
+| Провайдер + ошибки | ✅ | `llm-factory.ts`, `retry.ts` |
+| RAG + MMR | ✅ | `ingest.ts`, `fetch-rules.ts` |
+| Агент + HITL | ✅ | `graph.ts`, `memory.ts`, `hitl.ts` |
+| Мультиагентность | ✅ | `supervisor.ts`, `reviewer/` |
+
+**Все 4 темы — 100%**
 
 ---
 
@@ -258,7 +285,7 @@ src/
 ├── guards/          # Pre-Guard, Sanitizer, Classifier
 ├── utils/           # retry, memory, github-fallback
 ├── mcp-server/      # 4 инструмента
-├── graph.ts         # Граф (~130 строк)
+├── graph.ts         # Граф (~140 строк)
 ├── cli.ts           # CLI (3 команды)
 └── llm-factory.ts   # Фабрика LLM
 ```
@@ -269,13 +296,14 @@ src/
 
 ## Итоги
 
-✅ Мультиагентность + агентский цикл
+✅ Мультиагентность + честный агентский цикл (2 прохода)
 ✅ RAG с MMR-поиском
 ✅ MCP-интеграция с GitHub
 ✅ 3 эшелона защиты от инъекций
 ✅ Human-in-the-Loop
+✅ Эпизодическая память агента
 ✅ Retry, fallback, деградация, конфигурация
-✅ Память агента (история)
+✅ Смена провайдера (Ollama ↔ GigaChat)
 
 ---
 
