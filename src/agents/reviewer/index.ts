@@ -7,7 +7,8 @@ import { getHistoricalContext } from '../../utils/context-memory.js';
 import type { ReviewerInput, ReviewerResult } from './types.js';
 
 export async function reviewPR(input: ReviewerInput): Promise<ReviewerResult> {
-  console.log('📥 Агент-анализатор: анализ PR...\n');
+  const isLastPass = input.reviewPass >= input.maxReviewPasses;
+  console.log(`📥 Агент-анализатор: проход ${input.reviewPass}/${input.maxReviewPasses}...\n`);
   const startTime = Date.now();
 
   // 1. Дифф
@@ -16,14 +17,14 @@ export async function reviewPR(input: ReviewerInput): Promise<ReviewerResult> {
     return { reviewResult: 'ℹ️ PR не содержит изменений.', reviewDone: true };
   }
 
-  // 2. Контекст из истории проверок
+  // 2. Контекст из истории
   const historicalContext = await getHistoricalContext(
     files.map((f) => f.filename).join(', '),
     10
   );
 
-  // 3. Правила
-  const rulesText = await fetchRules();
+  // 3. Правила — разные запросы для разных проходов
+  const rulesText = await fetchRules(isLastPass);
   if (!rulesText) {
     return { reviewResult: '❌ Не удалось загрузить правила.', reviewDone: true };
   }
@@ -34,7 +35,7 @@ export async function reviewPR(input: ReviewerInput): Promise<ReviewerResult> {
     return { reviewResult: '❌ Не удалось составить чек-лист.', reviewDone: true };
   }
 
-  // 5. Анализ каждого файла (с историческим контекстом)
+  // 5. Анализ каждого файла
   const allViolations: Array<any> = [];
   for (const file of files) {
     const violations = await analyzeFile(file, checklist, historicalContext);
@@ -42,8 +43,19 @@ export async function reviewPR(input: ReviewerInput): Promise<ReviewerResult> {
     console.log('');
   }
 
-  // 6. Публикация + HITL
-  const reviewResult = await postResults(allViolations, input.prNumber, startTime);
+  // 6. Публикация + HITL (только на последнем проходе)
+  if (isLastPass) {
+    const reviewResult = await postResults(allViolations, input.prNumber, startTime);
 
-  return { reviewResult, reviewDone: true };
+    return {
+      reviewResult: `✅ Полный анализ завершён.\n\n${reviewResult}`,
+      reviewDone: true,
+    };
+  }
+
+  // Промежуточный проход — возвращаем частичный результат
+  return {
+    reviewResult: `⚠️ Проход ${input.reviewPass}/${input.maxReviewPasses} завершён. Проверены naming и запреты. Требуется проверка accessibility и тестов.`,
+    reviewDone: true,
+  };
 }

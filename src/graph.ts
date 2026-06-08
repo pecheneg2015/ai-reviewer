@@ -24,6 +24,8 @@ const AgentState = Annotation.Root({
   securityPassed: Annotation<boolean>({ reducer: (_, next) => next ?? true }),
   reviewDone: Annotation<boolean>({ reducer: (_, next) => next ?? false }),
   supervisorRoute: Annotation<string>({ reducer: (_, next) => next ?? '' }),
+  reviewPass: Annotation<number>({ reducer: (_, next) => next ?? 0 }),
+  maxReviewPasses: Annotation<number>({ reducer: (_, next) => next ?? 2 }),
 });
 
 type AgentStateType = typeof AgentState.State;
@@ -41,6 +43,8 @@ async function supervisorNode(state: AgentStateType): Promise<Partial<AgentState
     securityPassed: state.securityPassed,
     reviewDone: state.reviewDone,
     reviewResult: state.reviewResult,
+    reviewPass: state.reviewPass,
+    maxReviewPasses: state.maxReviewPasses,
   });
   return { supervisorRoute: route };
 }
@@ -95,10 +99,18 @@ async function generateNode(state: AgentStateType): Promise<Partial<AgentStateTy
 // ---------------------------------------------------------------------------
 
 async function analyzeDiffNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
-  const result = await reviewPR({ prNumber: state.prNumber });
+  const currentPass = state.reviewPass + 1;
+
+  const result = await reviewPR({
+    prNumber: state.prNumber,
+    reviewPass: currentPass,
+    maxReviewPasses: state.maxReviewPasses,
+  });
+
   return {
     reviewResult: result.reviewResult,
-    reviewDone: result.reviewDone,
+    reviewDone: true,
+    reviewPass: currentPass,
   };
 }
 

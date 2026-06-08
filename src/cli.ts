@@ -37,6 +37,12 @@ async function main() {
         mode: 'review',
         prNumber,
         reviewResult: '',
+        securityDone: false,
+        securityPassed: true,
+        reviewDone: false,
+        supervisorRoute: '',
+        reviewPass: 0,
+        maxReviewPasses: 2,
       });
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -99,6 +105,12 @@ async function main() {
     mode: 'ask',
     prNumber: 0,
     reviewResult: '',
+    securityDone: false,
+    securityPassed: true,
+    reviewDone: false,
+    supervisorRoute: '',
+    reviewPass: 0,
+    maxReviewPasses: 2,
   });
 
   console.log('━'.repeat(50));

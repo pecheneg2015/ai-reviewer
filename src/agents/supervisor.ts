@@ -1,6 +1,6 @@
+import { createLLM } from '../llm-factory.js';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { safeLLMCall } from '../utils/retry.js';
-import { createLLM } from '../llm-factory.js';
 
 export type AgentRoute = 'retrieve' | 'analyze_diff' | 'security' | 'done';
 
@@ -12,6 +12,8 @@ export interface SupervisorState {
   securityPassed: boolean;
   reviewDone: boolean;
   reviewResult: string;
+  reviewPass: number;
+  maxReviewPasses: number;
 }
 
 export async function supervisorDecision(state: SupervisorState): Promise<AgentRoute> {
@@ -41,30 +43,31 @@ export async function supervisorDecision(state: SupervisorState): Promise<AgentR
     return 'analyze_diff';
   }
 
-  // Ревьюер отработал — анализируем результат через LLM
-  const llm = await createLLM();
+  // Ревьюер отработал — проверяем, нужен ли ещё проход
+  if (state.reviewPass < state.maxReviewPasses) {
+    console.log(`   Решение: analyze_diff (проход ${state.reviewPass + 1}/${state.maxReviewPasses})`);
+    return 'analyze_diff';
+  }
 
-  // const llm = new ChatOllama({
-  //   model: process.env.OLLAMA_LLM_MODEL || 'qwen2.5-coder:7b',
-  //   baseUrl: process.env.OLLAMA_BASE_URL,
-  //   temperature: 0,
-  // });
+  // Все проходы завершены — анализируем результат через LLM
+  const llm = await createLLM();
 
   const SUPERVISOR_PROMPT = PromptTemplate.fromTemplate(`Ты — супервизор AI-системы код-ревью.
 Проанализируй результат ревью и реши, что делать дальше.
 
-## Результат ревью
+## Результат ревью (проход {reviewPass}/{maxReviewPasses})
 {reviewResult}
 
 ## Доступные действия
 - **retrieve** — ревью завершён, нужно сгенерировать финальный ответ с результатами
-- **analyze_diff** — результат неполный или есть ошибки, нужно повторить анализ
 - **done** — работа завершена
 
-Ответь одним словом: retrieve, analyze_diff или done.`);
+Ответь одним словом: retrieve или done.`);
 
   const formattedPrompt = await SUPERVISOR_PROMPT.format({
     reviewResult: state.reviewResult || '(пусто)',
+    reviewPass: state.reviewPass,
+    maxReviewPasses: state.maxReviewPasses,
   });
 
   const decision = await safeLLMCall(
@@ -76,11 +79,7 @@ export async function supervisorDecision(state: SupervisorState): Promise<AgentR
     'Супервизор'
   );
 
-  const route: AgentRoute =
-    decision === 'retrieve' ? 'retrieve' :
-      decision === 'analyze_diff' ? 'analyze_diff' :
-        'done';
-
+  const route: AgentRoute = decision === 'retrieve' ? 'retrieve' : 'done';
   console.log(`   Решение: ${route}`);
   return route;
 }

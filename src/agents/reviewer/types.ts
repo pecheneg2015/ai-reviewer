@@ -1,5 +1,7 @@
 export interface ReviewerInput {
   prNumber: number;
+  reviewPass: number;
+  maxReviewPasses: number;
 }
 
 export interface ReviewerResult {
