@@ -8,6 +8,7 @@ import { generateAnswer } from './agents/generator.js';
 import { securityCheck } from './agents/security.js';
 import { reviewPR } from './agents/reviewer/index.js';
 import { fetchDiff } from './agents/reviewer/fetch-diff.js';
+import { RetryPolicy } from '@langchain/langgraph';
 
 // ---------------------------------------------------------------------------
 // Состояние
@@ -145,7 +146,13 @@ const workflow = new StateGraph(AgentState)
   .addNode('security', securityNode)
   .addNode('retrieve', retrieveNode)
   .addNode('generate', generateNode)
-  .addNode('analyze_diff', analyzeDiffNode)
+  .addNode('analyze_diff', analyzeDiffNode, {
+    retryPolicy: {
+      maxAttempts: 3,
+      initialInterval: 1000,
+      backoffFactor: 2,
+    },
+  })
   .addEdge(START, 'supervisor')
   .addConditionalEdges('supervisor', routeAfterSupervisor, {
     security: 'security',
